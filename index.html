@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Sliding Window Visualization</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --text: #1e293b;
+        }
+
+        /* FIX 1: Global box-sizing to ensure 60px + 10px = 70px exactly */
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        h1 { margin-bottom: 10px; }
+        p { color: #64748b; margin-bottom: 20px; max-width: 600px; text-align: center; }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        input {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: #cbd5e1; cursor: not-allowed; }
+        button.secondary { background-color: #64748b; }
+
+        /* Visualization Area */
+        .vis-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            margin: 40px 0;
+            padding: 0 20px;
+        }
+
+        /* FIX 2: A dedicated stage for absolute positioning relative to the array */
+        .stage {
+            position: relative;
+            display: inline-flex;
+            gap: 10px;
+            padding-top: 20px;
+            padding-bottom: 50px; /* Space for pointers */
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            position: relative;
+            z-index: 10;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .index-label {
+            position: absolute;
+            top: -25px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        /* The Window Highlighting (The Caterpillar) */
+        .window-overlay {
+            position: absolute;
+            height: 80px; 
+            top: 10px; /* 10px overlap on top (20px pad - 10px offset) */
+            left: 0;
+            background-color: rgba(59, 130, 246, 0.2); 
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0; 
+        }
+
+        .window-overlay.valid {
+            background-color: rgba(34, 197, 94, 0.2);
+            border-color: var(--success);
+        }
+
+        .window-overlay.invalid {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-color: var(--danger);
+        }
+
+        /* Pointers */
+        .pointer {
+            position: absolute;
+            bottom: 0;
+            font-weight: bold;
+            font-size: 18px;
+            transition: left 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 60px; /* Exact same width as cell for easy centering */
+            text-align: center;
+        }
+
+        .pointer span { font-size: 20px; line-height: 1; }
+        .pointer-label { font-size: 12px; margin-top: 0px;}
+
+        .pointer.L { color: #d97706; z-index: 20; }
+        .pointer.R { color: #7c3aed; z-index: 21; }
+
+        /* Dashboard */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        .stat-label { font-size: 14px; color: #64748b; }
+
+        .log-container {
+            width: 100%;
+            max-width: 800px;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            height: 120px;
+            overflow-y: auto;
+            border: 1px solid #334155;
+        }
+
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #334155; padding-bottom: 2px;}
+        .log-entry.highlight { color: #4ade80; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Sliding Window Visualizer</h1>
+    <p>Find the smallest subarray with sum ≥ Target</p>
+
+    <div class="controls">
+        <div>
+            <label>Array (comma sep):</label>
+            <input type="text" id="inputArray" value="2, 3, 1, 2, 4, 3" style="width: 200px;">
+        </div>
+        <div>
+            <label>Target:</label>
+            <input type="number" id="inputTarget" value="7" style="width: 60px;">
+        </div>
+        <button onclick="init()">Reset / Load</button>
+        <div style="width: 1px; background: #cbd5e1; height: 30px; margin: 0 10px;"></div>
+        <button onclick="step()" class="secondary" id="btnStep">Step</button>
+        <button onclick="togglePlay()" id="btnPlay">Auto Play ▶</button>
+        <div style="display:flex; align-items:center; gap:5px;">
+             <label style="font-size:12px">Speed:</label>
+             <input type="range" id="speedRange" min="100" max="1500" value="800" style="width: 80px">
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <div class="stat-card">
+            <div class="stat-value" id="displaySum">0</div>
+            <div class="stat-label">Current Window Sum</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="displayTarget">7</div>
+            <div class="stat-label">Target Sum</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="displayBest">∞</div>
+            <div class="stat-label">Min Length Found</div>
+        </div>
+    </div>
+
+    <div class="vis-container" id="visContainer">
+        <!-- Everything inside one relative stage for perfect alignment -->
+        <div class="stage" id="stage">
+            <!-- Window Overlay -->
+            <div id="windowOverlay" class="window-overlay"></div>
+            
+            <!-- Array Elements injected here via JS -->
+            
+            <!-- Pointers -->
+            <div id="ptrL" class="pointer L"><span>⬆</span><span class="pointer-label">L</span></div>
+            <div id="ptrR" class="pointer R"><span>⬆</span><span class="pointer-label">R</span></div>
+        </div>
+    </div>
+
+    <div class="log-container" id="logBox">
+        <div class="log-entry">Waiting to start...</div>
+    </div>
+
+    <script>
+        // State Variables
+        let arr = [];
+        let target = 7;
+        let gen = null; // The generator object
+        let isPlaying = false;
+        let playInterval = null;
+        let isFinished = false;
+
+        // UI Constants
+        const CELL_WIDTH = 60; 
+        const GAP = 10;
+        const TOTAL_CELL_WIDTH = CELL_WIDTH + GAP; 
+
+        // DOM Elements
+        const elStage = document.getElementById('stage');
+        const elOverlay = document.getElementById('windowOverlay');
+        const elPtrL = document.getElementById('ptrL');
+        const elPtrR = document.getElementById('ptrR');
+        const elLog = document.getElementById('logBox');
+        
+        // --- Initialization ---
+        function init() {
+            // Stop existing play
+            stopPlay();
+            isFinished = false;
+
+            // Parse Inputs
+            const rawArr = document.getElementById('inputArray').value;
+            arr = rawArr.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+            target = parseInt(document.getElementById('inputTarget').value);
+
+            // Reset UI
+            document.getElementById('displayTarget').innerText = target;
+            document.getElementById('displaySum').innerText = '0';
+            document.getElementById('displayBest').innerText = '∞';
+            elLog.innerHTML = '<div class="log-entry">Loaded. Ready to start.</div>';
+            
+            // Render Array Grid
+            // Remove old cells only
+            const oldCells = document.querySelectorAll('.cell');
+            oldCells.forEach(c => c.remove());
+
+            // Add new cells before the pointers
+            arr.forEach((val, idx) => {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.innerHTML = `
+                    <span class="index-label">${idx}</span>
+                    ${val}
+                `;
+                // Insert before L pointer so they sit in the flex flow naturally
+                // but pointers are absolute, so it doesn't matter for flow, only for z-order or DOM order
+                elStage.insertBefore(cell, elPtrL);
+            });
+
+            // Reset Pointers visually
+            updatePointersUI(0, -1); 
+            elOverlay.style.opacity = '0';
+            elOverlay.style.width = '0px';
+
+            // Initialize Generator
+            gen = slidingWindowAlgorithm(arr, target);
+        }
+
+        // --- The Core Algorithm Generator ---
+        function* slidingWindowAlgorithm(nums, k) {
+            let left = 0;
+            let currentSum = 0;
+            let minLen = Infinity;
+
+            for (let right = 0; right < nums.length; right++) {
+                
+                // Phase 1: Expansion
+                currentSum += nums[right];
+                
+                yield {
+                    type: 'EXPAND',
+                    L: left, R: right,
+                    sum: currentSum,
+                    minLen: minLen,
+                    msg: `Expanded R to index ${right} (Value: ${nums[right]}). Sum is now ${currentSum}.`
+                };
+
+                // Phase 2: Contraction (While valid)
+                while (currentSum >= k) {
+                    let currentLen = right - left + 1;
+                    let isNewBest = false;
+                    
+                    if (currentLen < minLen) {
+                        minLen = currentLen;
+                        isNewBest = true;
+                    }
+
+                    yield {
+                        type: 'VALID',
+                        L: left, R: right,
+                        sum: currentSum,
+                        minLen: minLen,
+                        isNewBest: isNewBest,
+                        msg: `Sum ${currentSum} >= ${k}. Valid Window! Length: ${currentLen}. ${isNewBest ? "New Record!" : ""}`
+                    };
+
+                    // Shrink
+                    let removedVal = nums[left];
+                    currentSum -= removedVal;
+                    left++;
+
+                    yield {
+                        type: 'SHRINK',
+                        L: left, R: right,
+                        sum: currentSum,
+                        minLen: minLen,
+                        msg: `Shrinking L. Removed ${removedVal}. Sum is now ${currentSum}.`
+                    };
+                }
+            }
+
+            yield {
+                type: 'FINISHED',
+                minLen: minLen,
+                msg: `Algorithm Finished. Min Length: ${minLen === Infinity ? 0 : minLen}`
+            };
+        }
+
+        // --- Step Logic ---
+        function step() {
+            if (isFinished) return;
+            if (!gen) init();
+
+            const res = gen.next();
+            
+            if (res.done) {
+                isFinished = true;
+                stopPlay();
+                log("Generator finished.");
+                return;
+            }
+
+            const state = res.value;
+            renderState(state);
+
+            if (state.type === 'FINISHED') {
+                isFinished = true;
+                stopPlay();
+            }
+        }
+
+        // --- Rendering ---
+        function renderState(state) {
+            // Update Text Stats
+            document.getElementById('displaySum').innerText = state.sum !== undefined ? state.sum : '-';
+            if (state.minLen !== undefined && state.minLen !== Infinity) {
+                document.getElementById('displayBest').innerText = state.minLen;
+            }
+
+            // Log Message
+            log(state.msg, state.type === 'VALID');
+
+            // Move Pointers
+            updatePointersUI(state.L, state.R);
+
+            // Update Window Overlay
+            if (state.type === 'FINISHED') {
+                elOverlay.style.opacity = '0';
+                return;
+            }
+
+            if (state.L > state.R) {
+                elOverlay.style.width = '0px';
+                const leftPos = (state.L * TOTAL_CELL_WIDTH);
+                elOverlay.style.left = leftPos + 'px';
+            } else {
+                elOverlay.style.opacity = '1';
+                // Width: (Count * 70) - 10 (gap)
+                const width = ((state.R - state.L + 1) * TOTAL_CELL_WIDTH) - GAP; 
+                const leftPos = (state.L * TOTAL_CELL_WIDTH);
+                
+                elOverlay.style.width = width + 'px';
+                elOverlay.style.left = leftPos + 'px';
+
+                // Color based on validity
+                if (state.sum >= target) {
+                    elOverlay.className = 'window-overlay valid';
+                } else {
+                    elOverlay.className = 'window-overlay invalid'; 
+                }
+                
+                if (state.type === 'EXPAND') {
+                     if (state.sum < target) elOverlay.className = 'window-overlay'; 
+                     else elOverlay.className = 'window-overlay valid';
+                }
+            }
+        }
+
+        function updatePointersUI(L, R) {
+            // L Pointer
+            // Pointer width is 60. Cell is 60. Gap is 10.
+            // Coordinate 0 is start of cell 0.
+            // L=0 -> 0px. L=1 -> 70px.
+            const leftPos = (L * TOTAL_CELL_WIDTH);
+            elPtrL.style.left = leftPos + 'px';
+
+            // R Pointer
+            if (R < 0) {
+                elPtrR.style.left = '-100px';
+                elPtrR.style.opacity = '0';
+            } else {
+                elPtrR.style.opacity = '1';
+                const rightPos = (R * TOTAL_CELL_WIDTH);
+                elPtrR.style.left = rightPos + 'px';
+            }
+        }
+
+        // --- Controls ---
+        function togglePlay() {
+            if (isPlaying) {
+                stopPlay();
+            } else {
+                startPlay();
+            }
+        }
+
+        function startPlay() {
+            if (isFinished) init();
+            isPlaying = true;
+            document.getElementById('btnPlay').innerText = 'Pause ⏸';
+            document.getElementById('btnStep').disabled = true;
+
+            const speed = parseInt(document.getElementById('speedRange').value);
+            
+            step();
+            playInterval = setInterval(() => {
+                if (isFinished) {
+                    stopPlay();
+                } else {
+                    step();
+                }
+            }, 2000 - speed); 
+        }
+
+        function stopPlay() {
+            isPlaying = false;
+            clearInterval(playInterval);
+            document.getElementById('btnPlay').innerText = 'Auto Play ▶';
+            document.getElementById('btnStep').disabled = false;
+        }
+
+        function log(msg, highlight=false) {
+            const div = document.createElement('div');
+            div.className = 'log-entry' + (highlight ? ' highlight' : '');
+            div.innerText = `> ${msg}`;
+            elLog.prepend(div);
+        }
+
+        // Init on load
+        window.onload = init;
+
+    </script>
+</body>
+</html>
