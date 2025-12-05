@@ -3,7 +3,7 @@
 A minimal static project containing a single-page demo.
 
 **Contents**
-- `index.html` — main page / demo
+- `index.html` - main page / demo
 
 **Description**
 This repository contains a small static site. It currently includes a single HTML file (`index.html`) at the project root. Use this repo as a starting point for a static demo, experiment, or small front-end prototype.
@@ -19,7 +19,7 @@ python -m http.server 8000
 ```
 
 **Files**
-- `index.html` — entrypoint
+- `index.html` - entrypoint
 
 **Next steps**
 - Add a short project description to this README.
