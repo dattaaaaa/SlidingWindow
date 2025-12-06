@@ -20,14 +20,3 @@ python -m http.server 8000
 
 **Files**
 - `index.html` - entrypoint
-
-**Next steps**
-- Add a short project description to this README.
-- Add any assets (images, CSS, JS) into an `assets/` or `src/` folder.
-- Add a license and contributor information if you plan to share the project.
-
-**License**
-No license specified. Add a `LICENSE` file if you want to make usage terms explicit.
-
-**Contact**
-Add author or contact info here (optional).
